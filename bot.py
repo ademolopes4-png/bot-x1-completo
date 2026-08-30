@@ -11,7 +11,6 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Dicionários globais para gerenciar as filas de cada modo
-# Estrutura: filas[modo][subcategoria] = [lista de membros]
 filas = {
     "1v1": {"Taxa R$ 0,30": []},
     "2v2": {"R$ 2,00": [], "R$ 4,00": []},
@@ -27,12 +26,10 @@ class PainelCompletoView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    # Botão do 1v1 (Taxa da sala R$ 0,30)
     @discord.ui.button(label="1v1 - Taxa R$ 0,30", style=discord.ButtonStyle.green, custom_id="1v1_taxa", emoji="🪙", row=0)
     async def f_1v1_taxa(self, interaction: discord.Interaction, button: discord.ui.Button):
         await entrar_na_fila(interaction, "1v1", "Taxa R$ 0,30", 2)
 
-    # Botões do 2v2 (Valores: R$ 2,00 e R$ 4,00)
     @discord.ui.button(label="2v2 - R$ 2,00", style=discord.ButtonStyle.blurple, custom_id="2v2_2rs", emoji="💵", row=1)
     async def f_2v2_2rs(self, interaction: discord.Interaction, button: discord.ui.Button):
         await entrar_na_fila(interaction, "2v2", "R$ 2,00", 4)
@@ -41,7 +38,6 @@ class PainelCompletoView(discord.ui.View):
     async def f_2v2_4rs(self, interaction: discord.Interaction, button: discord.ui.Button):
         await entrar_na_fila(interaction, "2v2", "R$ 4,00", 4)
 
-    # Botões do 3v3 (Valores: R$ 3,00 e R$ 6,00)
     @discord.ui.button(label="3v3 - R$ 3,00", style=discord.ButtonStyle.grey, custom_id="3v3_3rs", emoji="💵", row=2)
     async def f_3v3_3rs(self, interaction: discord.Interaction, button: discord.ui.Button):
         await entrar_na_fila(interaction, "3v3", "R$ 3,00", 6)
@@ -50,7 +46,6 @@ class PainelCompletoView(discord.ui.View):
     async def f_3v3_6rs(self, interaction: discord.Interaction, button: discord.ui.Button):
         await entrar_na_fila(interaction, "3v3", "R$ 6,00", 6)
 
-    # Botão de Ranking
     @discord.ui.button(label="Ver Ranking Geral", style=discord.ButtonStyle.secondary, custom_id="btn_ranking", emoji="🏆", row=3)
     async def ver_ranking(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("🏆 **Ranking Geral:**\nNenhum jogador pontuou no ranking ainda.", ephemeral=True)
@@ -66,13 +61,27 @@ async def entrar_na_fila(interaction: discord.Interaction, modo: str, subcategor
     lista.append(user)
     
     if len(lista) < limite:
-        nomes_esperando = ", ".join([m.mention for m in lista])
-        await interaction.response.send_message(f"✅ Você entrou na fila **{modo} ({subcategoria})**!\n⏳ **Aguardando o oponente...** Jogadores na fila: {nomes_esperando}", ephemeral=True)
+        # Responde publicamente no canal para todo mundo ver quem está esperando
+        mencoes_fila = "\n".join([f"{m.mention}" for m in lista])
+        embed = discord.Embed(
+            title=f"⚔️ Fila: {modo} | {subcategoria}",
+            description=f"**Jogadores na fila:**\n{mencoes_fila}\n\n⏳ *Aguardando o restante dos jogadores...*",
+            color=0xff9900
+        )
+        embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
+        
+        await interaction.response.send_message(embed=embed)
     else:
         jogadores_partida = lista[:limite]
         filas[modo][subcategoria] = [] # Limpa a fila
 
-        await interaction.response.send_message(f"🚀 Fila completa para **{modo} ({subcategoria})**! Criando canal privado...", ephemeral=True)
+        mencoes_fila = "\n".join([f"{m.mention}" for m in jogadores_partida])
+        embed = discord.Embed(
+            title=f"🚀 Fila Completa: {modo} | {subcategoria}",
+            description=f"**Jogadores:**\n{mencoes_fila}\n\n✅ *Criando canal privado da partida...*",
+            color=0x00ff00
+        )
+        await interaction.response.send_message(embed=embed)
         await criar_canal_partida(interaction.guild, modo, subcategoria, jogadores_partida)
 
 async def criar_canal_partida(guild: discord.Guild, modo: str, subcategoria: str, jogadores: list):
