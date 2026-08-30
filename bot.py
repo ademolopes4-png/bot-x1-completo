@@ -12,7 +12,6 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Arquivo para salvar o ranking persistentemente
 RANKING_FILE = "ranking.json"
 
 def carregar_ranking():
@@ -28,12 +27,29 @@ def salvar_ranking(dados):
     with open(RANKING_FILE, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
 
-# Dicionários globais para gerenciar as filas e suas mensagens
+def gerar_texto_ranking():
+    ranking_data = carregar_ranking()
+    if not ranking_data:
+        return "1º 🥇 *Nenhum registrado*\n2º 🥈 *Nenhum registrado*\n3º 🥉 *Nenhum registrado*"
+    
+    ranking_ordenado = sorted(ranking_data.items(), key=lambda x: x[1]["vitorias"], reverse=True)
+    medalhas = ["🥇", "🥈", "🥉", "4º", "5º", "6º", "7º", "8º", "9º", "10º"]
+    linhas = []
+    
+    for i, (user_id, dados) in enumerate(ranking_ordenado[:10]):
+        tag_medalha = medalhas[i] if i < len(medalhas) else f"{i+1}º"
+        linhas.append(f"{tag_medalha} **{dados['nome']}** — 🏆 {dados['vitorias']} vitórias ({dados['pontos']} pts)")
+    
+    return "\n".join(linhas)
+
+# Dicionários globais para gerenciar filas e a mensagem do painel principal
 filas = {
     "1v1": {"Taxa R$ 0,30": {"usuarios": [], "mensagem": None}},
     "2v2": {"R$ 2,00": {"usuarios": [], "mensagem": None}, "R$ 4,00": {"usuarios": [], "mensagem": None}},
     "3v3": {"R$ 3,00": {"usuarios": [], "mensagem": None}, "R$ 6,00": {"usuarios": [], "mensagem": None}}
 }
+
+painel_mensagem_ref = None
 
 @bot.event
 async def on_ready():
@@ -66,29 +82,28 @@ class PainelCompletoView(discord.ui.View):
 
     @discord.ui.button(label="Ver Ranking Geral", style=discord.ButtonStyle.secondary, custom_id="btn_ranking", emoji="🏆", row=3)
     async def ver_ranking(self, interaction: discord.Interaction, button: discord.ui.Button):
-        ranking_data = carregar_ranking()
-        
-        if not ranking_data:
-            texto_ranking = "1º 🥇 *Nenhum registrado*\n2º 🥈 *Nenhum registrado*\n3º 🥉 *Nenhum registrado*"
-        else:
-            # Ordena os jogadores por quantidade de vitórias em ordem decrescente
-            ranking_ordenado = sorted(ranking_data.items(), key=lambda x: x[1]["vitorias"], reverse=True)
-            
-            medalhas = ["🥇", "🥈", "🥉", "4º", "5º", "6º", "7º", "8º", "9º", "10º"]
-            linhas = []
-            
-            for i, (user_id, dados) in enumerate(ranking_ordenado[:10]):
-                tag_medalha = medalhas[i] if i < len(medalhas) else f"{i+1}º"
-                linhas.append(f"{tag_medalha} **{dados['nome']}** — 🏆 {dados['vitorias']} vitórias ({dados['pontos']} pts)")
-            
-            texto_ranking = "\n".join(linhas)
-
+        texto_ranking = gerar_texto_ranking()
         embed = discord.Embed(
             title="🏆 TOP MELHORES JOGADORES 🏆",
             description=texto_ranking,
             color=0xffd700
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+async def atualizar_painel_global():
+    global painel_mensagem_ref
+    if painel_mensagem_ref:
+        try:
+            texto_ranking = gerar_texto_ranking()
+            embed = discord.Embed(
+                title="🏆 PAINEL DE RANKING GERAL 🏆",
+                description=f"{texto_ranking}\n\n---------------------------------------------\n⚔️ **ESCOLHA SUA FILA ABAIXO:**",
+                color=0xffd700
+            )
+            embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
+            await painel_mensagem_ref.edit(embed=embed)
+        except:
+            pass
 
 async def entrar_na_fila(interaction: discord.Interaction, modo: str, subcategoria: str, limite: int):
     user = interaction.user
@@ -224,17 +239,21 @@ class ConfirmarPartidaView(discord.ui.View):
             await self.canal.send(".cs")
 
             view_vencedor = DefinirVencedorView(self.jogadores, self.canal)
-            await self.canal.send("🏆 **A partida foi iniciada!** Assim que terminar, defina o vencedor abaixo:", view=view_vencedor)
+            await self.canal.send("🏆 **A partida foi iniciada!** Assim que terminar, defina o vencedor ou feche a partida abaixo:", view=view_vencedor)
 
-# --- VIEW DE DEFINIR VENCEDOR E ATUALIZAR RANKING ---
+# --- VIEW DE DEFINIR VENCEDOR E FECHAR CANAL ---
 class DefinirVencedorView(discord.ui.View):
     def __init__(self, jogadores, canal):
         super().__init__(timeout=None)
         self.jogadores = jogadores
         self.canal = canal
 
+        # Adiciona botões para cada jogador vencer
         for i, jogador in enumerate(jogadores):
             self.add_item(VencedorButton(jogador, label=f"Vencedor: {jogador.display_name}", row=i//2))
+        
+        # Adiciona o botão de Fechar Canal / Finalizar Fila na última linha
+        self.add_item(FecharCanalButton(row=2))
 
 class VencedorButton(discord.ui.Button):
     def __init__(self, vencedor, label, row):
@@ -242,7 +261,6 @@ class VencedorButton(discord.ui.Button):
         self.vencedor = vencedor
 
     async def callback(self, interaction: discord.Interaction):
-        # Atualiza o arquivo de ranking
         ranking_data = carregar_ranking()
         user_id_str = str(self.vencedor.id)
         
@@ -251,15 +269,19 @@ class VencedorButton(discord.ui.Button):
             
         ranking_data[user_id_str]["vitorias"] += 1
         ranking_data[user_id_str]["pontos"] += 10
-        ranking_data[user_id_str]["nome"] = self.vencedor.display_name # Atualiza o nick caso tenha mudado
+        ranking_data[user_id_str]["nome"] = self.vencedor.display_name
         
         salvar_ranking(ranking_data)
+        await atualizar_painel_global()
 
         await interaction.response.send_message(f"🏆 **Vitória contabilizada para {self.vencedor.mention}!** (+10 pontos)\n🔒 **Este canal será apagado automaticamente em 5 segundos...**", ephemeral=False)
         
         for child in self.view.children:
             child.disabled = True
-        await interaction.message.edit(view=self)
+        try:
+            await interaction.message.edit(view=self)
+        except:
+            pass
 
         await asyncio.sleep(5)
         try:
@@ -267,17 +289,40 @@ class VencedorButton(discord.ui.Button):
         except:
             pass
 
+class FecharCanalButton(discord.ui.Button):
+    def __init__(self, row):
+        super().__init__(style=discord.ButtonStyle.danger, label="🔒 Fechar Canal", row=row, emoji="✖️")
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_message("🔒 **Canal encerrado manualmente pelo administrador! Apagando agora...**", ephemeral=False)
+        
+        for child in self.view.children:
+            child.disabled = True
+        try:
+            await interaction.message.edit(view=self)
+        except:
+            pass
+
+        await asyncio.sleep(2)
+        try:
+            await interaction.channel.delete()
+        except:
+            pass
+
 @bot.command(name="painel")
 async def painel(ctx):
+    global painel_mensagem_ref
+    texto_ranking = gerar_texto_ranking()
+    
     embed = discord.Embed(
         title="🏆 PAINEL DE RANKING GERAL 🏆",
-        description="1º 🥇 *Nenhum registrado*\n2º 🥈 *Nenhum registrado*\n3º 🥉 *Nenhum registrado*\n\n---------------------------------------------\n⚔️ **ESCOLHA SUA FILA ABAIXO:**",
+        description=f"{texto_ranking}\n\n---------------------------------------------\n⚔️ **ESCOLHA SUA FILA ABAIXO:**",
         color=0xffd700
     )
     embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
     
     view = PainelCompletoView()
-    await ctx.send(embed=embed, view=view)
+    painel_mensagem_ref = await ctx.send(embed=embed, view=view)
 
 keep_alive()
 
