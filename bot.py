@@ -1,4 +1,5 @@
 import os
+import asyncio
 import discord
 from discord.ext import commands
 from keep_alive import keep_alive
@@ -61,7 +62,7 @@ async def entrar_na_fila(interaction: discord.Interaction, modo: str, subcategor
     lista.append(user)
     
     if len(lista) < limite:
-        # Responde publicamente no canal para todo mundo ver quem está esperando
+        view = SairFilaView(modo, subcategoria, lista)
         mencoes_fila = "\n".join([f"{m.mention}" for m in lista])
         embed = discord.Embed(
             title=f"⚔️ Fila: {modo} | {subcategoria}",
@@ -70,7 +71,7 @@ async def entrar_na_fila(interaction: discord.Interaction, modo: str, subcategor
         )
         embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
         
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, view=view)
     else:
         jogadores_partida = lista[:limite]
         filas[modo][subcategoria] = [] # Limpa a fila
@@ -83,6 +84,39 @@ async def entrar_na_fila(interaction: discord.Interaction, modo: str, subcategor
         )
         await interaction.response.send_message(embed=embed)
         await criar_canal_partida(interaction.guild, modo, subcategoria, jogadores_partida)
+
+# --- VIEW DO BOTÃO DE SAIR DA FILA ---
+class SairFilaView(discord.ui.View):
+    def __init__(self, modo, subcategoria, lista):
+        super().__init__(timeout=None)
+        self.modo = modo
+        self.subcategoria = subcategoria
+        self.lista = lista
+
+    @discord.ui.button(label="Sair da Fila", style=discord.ButtonStyle.danger, emoji="✖️")
+    async def sair(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user = interaction.user
+        if user in self.lista:
+            self.lista.remove(user)
+            if len(self.lista) > 0:
+                mencoes_fila = "\n".join([f"{m.mention}" for m in self.lista])
+                embed = discord.Embed(
+                    title=f"⚔️ Fila: {self.modo} | {self.subcategoria}",
+                    description=f"**Jogadores na fila:**\n{mencoes_fila}\n\n⏳ *Aguardando o restante dos jogadores...*",
+                    color=0xff9900
+                )
+                await interaction.response.edit_message(embed=embed, view=self)
+            else:
+                embed = discord.Embed(
+                    title=f"⚔️ Fila: {self.modo} | {self.subcategoria}",
+                    description="❌ *A fila está vazia.*",
+                    color=0x808080
+                )
+                for child in self.children:
+                    child.disabled = True
+                await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            await interaction.response.send_message("Você não está nesta fila!", ephemeral=True)
 
 async def criar_canal_partida(guild: discord.Guild, modo: str, subcategoria: str, jogadores: list):
     overwrites = {
@@ -136,7 +170,7 @@ class ConfirmarPartidaView(discord.ui.View):
             view_vencedor = DefinirVencedorView(self.jogadores, self.canal)
             await self.canal.send("🏆 **A partida foi iniciada!** Assim que terminar, defina o vencedor abaixo:", view=view_vencedor)
 
-# --- VIEW DE DEFINIR VENCEDOR ---
+# --- VIEW DE DEFINIR VENCEDOR E FECHAR CANAL ---
 class DefinirVencedorView(discord.ui.View):
     def __init__(self, jogadores, canal):
         super().__init__(timeout=None)
@@ -152,11 +186,18 @@ class VencedorButton(discord.ui.Button):
         self.vencedor = vencedor
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_message(f"🏆 **Vitória contabilizada para {self.vencedor.mention}!** Parabéns!\nEste canal será fechado em instantes.", ephemeral=False)
+        await interaction.response.send_message(f"🏆 **Vitória contabilizada para {self.vencedor.mention}!** Parabéns!\n🔒 **Este canal será apagado automaticamente em 5 segundos...**", ephemeral=False)
         
         for child in self.view.children:
             child.disabled = True
         await interaction.message.edit(view=self)
+
+        # Aguarda 5 segundos e deleta o canal privado automaticamente
+        await asyncio.sleep(5)
+        try:
+            await interaction.channel.delete()
+        except:
+            pass
 
 @bot.command(name="painel")
 async def painel(ctx):
