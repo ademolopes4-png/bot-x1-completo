@@ -205,7 +205,9 @@ async def criar_canal_partida(guild: discord.Guild, modo: str, subcategoria: str
         description=f"Jogadores: {mencoes}\n\n**Combinem suas regras, o valor da aposta e confirme a partida abaixo!**",
         color=0xff0000
     )
-    await canal.send(content=mencoes, embed=embed, view=view)
+    
+    # Envia a saudação "Olá macaquitos 🦧" junto com as menções dos jogadores e administradores (ou canal) se necessário
+    await canal.send(content=f"Olá macaquitos 🦧 {mencoes}", embed=embed, view=view)
 
 class ConfirmarPartidaView(discord.ui.View):
     def __init__(self, jogadores, canal):
@@ -217,7 +219,7 @@ class ConfirmarPartidaView(discord.ui.View):
     @discord.ui.button(label="Confirmar Partida", style=discord.ButtonStyle.green, emoji="✅")
     async def confirmar(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user not in self.jogadores:
-            await interaction.response.send_message("Você não faz parte desta partida!", ephemeral=True)
+            await interaction.response.send_message("❌ Você não faz parte desta partida!", ephemeral=True)
             return
 
         self.confirmados.add(interaction.user)
@@ -226,7 +228,7 @@ class ConfirmarPartidaView(discord.ui.View):
         if restantes > 0:
             await interaction.response.send_message(f"✅ {interaction.user.mention} confirmou! Faltam **{restantes}** confirmações.", ephemeral=False)
         else:
-            await interaction.response.send_message("🎉 **Todas as confirmações realizadas!** Gerando sala...", ephemeral=False)
+            await interaction.response.send_message("🎉 **Todas as confirmações realizadas!** Sala pronta para criação manual.", ephemeral=False)
             
             for child in self.children:
                 child.disabled = True
@@ -235,17 +237,8 @@ class ConfirmarPartidaView(discord.ui.View):
             except:
                 pass
 
-            # 1. Envia primeiro os botões de administração e aviso para ficarem em cima
             view_vencedor = DefinirVencedorView(self.jogadores, self.canal)
-            await self.canal.send("🏆 **A partida foi iniciada!** Assim que terminar, defina o vencedor ou feche a partida abaixo (Apenas Administradores):", view=view_vencedor)
-
-            # 2. Envia o .cs POR ÚLTIMO (via Webhook) para garantir que seja a última mensagem do canal
-            try:
-                webhooks = await self.canal.webhooks()
-                webhook = webhooks[0] if webhooks else await self.canal.create_webhook(name="RoomHelper")
-                await webhook.send(content=".cs", username=interaction.user.display_name, avatar_url=interaction.user.display_avatar.url)
-            except Exception as e:
-                await self.canal.send(".cs")
+            await self.canal.send("🏆 **A partida foi iniciada!** Assim que criar a sala e terminar, defina o vencedor ou feche a partida abaixo (Apenas Administradores):", view=view_vencedor)
 
 class DefinirVencedorView(discord.ui.View):
     def __init__(self, jogadores, canal):
@@ -422,4 +415,3 @@ if TOKEN:
     bot.run(TOKEN)
 else:
     print("ERRO: DISCORD_TOKEN não encontrado nas variáveis de ambiente!")
-
