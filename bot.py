@@ -236,6 +236,7 @@ class ConfirmarPartidaView(discord.ui.View):
                 child.disabled = True
             await interaction.message.edit(view=self)
 
+            # Envia puramente o comando .cs isolado
             await self.canal.send(".cs")
 
             view_vencedor = DefinirVencedorView(self.jogadores, self.canal)
@@ -395,7 +396,6 @@ async def removerfila(ctx, membro: discord.Member):
                 dados["usuarios"].remove(membro)
                 removido = True
                 
-                # Se a fila esvaziou totalmente, apaga a mensagem de aviso antiga
                 if len(dados["usuarios"]) == 0 and dados["mensagem"]:
                     try:
                         await dados["mensagem"].delete()
