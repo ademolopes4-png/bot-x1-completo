@@ -42,7 +42,7 @@ def gerar_texto_ranking():
     
     return "\n".join(linhas)
 
-# Dicionários globais para gerenciar filas e a mensagem do painel principal
+# Dicionários globais para gerenciar filas e painel
 filas = {
     "1v1": {"Taxa R$ 0,30": {"usuarios": [], "mensagem": None}},
     "2v2": {"R$ 2,00": {"usuarios": [], "mensagem": None}, "R$ 4,00": {"usuarios": [], "mensagem": None}},
@@ -239,20 +239,18 @@ class ConfirmarPartidaView(discord.ui.View):
             await self.canal.send(".cs")
 
             view_vencedor = DefinirVencedorView(self.jogadores, self.canal)
-            await self.canal.send("🏆 **A partida foi iniciada!** Assim que terminar, defina o vencedor ou feche a partida abaixo:", view=view_vencedor)
+            await self.canal.send("🏆 **A partida foi iniciada!** Assim que terminar, defina o vencedor ou feche a partida abaixo (Apenas Administradores):", view=view_vencedor)
 
-# --- VIEW DE DEFINIR VENCEDOR E FECHAR CANAL ---
+# --- VIEW DE DEFINIR VENCEDOR E FECHAR CANAL (APENAS ADMINS) ---
 class DefinirVencedorView(discord.ui.View):
     def __init__(self, jogadores, canal):
         super().__init__(timeout=None)
         self.jogadores = jogadores
         self.canal = canal
 
-        # Adiciona botões para cada jogador vencer
         for i, jogador in enumerate(jogadores):
             self.add_item(VencedorButton(jogador, label=f"Vencedor: {jogador.display_name}", row=i//2))
         
-        # Adiciona o botão de Fechar Canal / Finalizar Fila na última linha
         self.add_item(FecharCanalButton(row=2))
 
 class VencedorButton(discord.ui.Button):
@@ -261,6 +259,11 @@ class VencedorButton(discord.ui.Button):
         self.vencedor = vencedor
 
     async def callback(self, interaction: discord.Interaction):
+        # Validação de Administrador
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Apenas **Administradores** podem definir o vencedor da partida!", ephemeral=True)
+            return
+
         ranking_data = carregar_ranking()
         user_id_str = str(self.vencedor.id)
         
@@ -294,6 +297,11 @@ class FecharCanalButton(discord.ui.Button):
         super().__init__(style=discord.ButtonStyle.danger, label="🔒 Fechar Canal", row=row, emoji="✖️")
 
     async def callback(self, interaction: discord.Interaction):
+        # Validação de Administrador
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Apenas **Administradores** podem fechar este canal!", ephemeral=True)
+            return
+
         await interaction.response.send_message("🔒 **Canal encerrado manualmente pelo administrador! Apagando agora...**", ephemeral=False)
         
         for child in self.view.children:
@@ -308,6 +316,8 @@ class FecharCanalButton(discord.ui.Button):
             await interaction.channel.delete()
         except:
             pass
+
+# --- COMANDOS EXCLUSIVOS PARA ADMINISTRADORES ---
 
 @bot.command(name="painel")
 async def painel(ctx):
@@ -324,6 +334,87 @@ async def painel(ctx):
     view = PainelCompletoView()
     painel_mensagem_ref = await ctx.send(embed=embed, view=view)
 
+@bot.command(name="addvitorias")
+@commands.has_permissions(administrator=True)
+async def addvitorias(ctx, membro: discord.Member, quantidade: int):
+    ranking_data = carregar_ranking()
+    user_id_str = str(membro.id)
+
+    if user_id_str not in ranking_data:
+        ranking_data[user_id_str] = {"nome": membro.display_name, "vitorias": 0, "pontos": 0}
+
+    ranking_data[user_id_str]["vitorias"] += quantidade
+    ranking_data[user_id_str]["pontos"] += (quantidade * 10)
+    ranking_data[user_id_str]["nome"] = membro.display_name
+
+    salvar_ranking(ranking_data)
+    await atualizar_painel_global()
+
+    await ctx.send(f"✅ Adicionadas **{quantidade}** vitória(s) para {membro.mention} com sucesso!")
+
+@addvitorias.error
+async def addvitorias_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Você precisa ser **Administrador** para usar este comando!")
+    else:
+        await ctx.send("⚠️ Uso correto: `!addvitorias @usuario quantidade` (Ex: `!addvitorias @fulano 2`)")
+
+@bot.command(name="removervitorias")
+@commands.has_permissions(administrator=True)
+async def removervitorias(ctx, membro: discord.Member, quantidade: int):
+    ranking_data = carregar_ranking()
+    user_id_str = str(membro.id)
+
+    if user_id_str not in ranking_data:
+        await ctx.send(f"❌ O usuário {membro.mention} não possui registros no ranking.")
+        return
+
+    ranking_data[user_id_str]["vitorias"] = max(0, ranking_data[user_id_str]["vitorias"] - quantidade)
+    ranking_data[user_id_str]["pontos"] = max(0, ranking_data[user_id_str]["pontos"] - (quantidade * 10))
+
+    salvar_ranking(ranking_data)
+    await atualizar_painel_global()
+
+    await ctx.send(f"🗑️ Removidas **{quantidade}** vitória(s) de {membro.mention} com sucesso!")
+
+@removervitorias.error
+async def removervitorias_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Você precisa ser **Administrador** para usar este comando!")
+    else:
+        await ctx.send("⚠️ Uso correto: `!removervitorias @usuario quantidade` (Ex: `!removervitorias @fulano 1`)")
+
+@bot.command(name="removerfila")
+@commands.has_permissions(administrator=True)
+async def removerfila(ctx, membro: discord.Member):
+    removido = False
+    
+    for modo, subcategorias in filas.items():
+        for sub, dados in subcategorias.items():
+            if membro in dados["usuarios"]:
+                dados["usuarios"].remove(membro)
+                removido = True
+                
+                # Se a fila esvaziou totalmente, apaga a mensagem de aviso antiga
+                if len(dados["usuarios"]) == 0 and dados["mensagem"]:
+                    try:
+                        await dados["mensagem"].delete()
+                    except:
+                        pass
+                    dados["mensagem"] = None
+
+    if removido:
+        await ctx.send(f"🧹 O usuário {membro.mention} foi **removido de todas as filas** ativas por um administrador.")
+    else:
+        await ctx.send(f"⚠️ O usuário {membro.mention} não está em nenhuma fila no momento.")
+
+@removerfila.error
+async def removerfila_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Você precisa ser **Administrador** para usar este comando!")
+    else:
+        await ctx.send("⚠️ Uso correto: `!removerfila @usuario`")
+
 keep_alive()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -331,3 +422,4 @@ if TOKEN:
     bot.run(TOKEN)
 else:
     print("ERRO: DISCORD_TOKEN não encontrado nas variáveis de ambiente!")
+
