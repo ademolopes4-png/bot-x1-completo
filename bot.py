@@ -235,17 +235,17 @@ class ConfirmarPartidaView(discord.ui.View):
             except:
                 pass
 
-            # Cria um Webhook temporário para enviar o .cs simulando um usuário real e ativar o bot de salas
+            # 1. Envia primeiro os botões de administração e aviso para ficarem em cima
+            view_vencedor = DefinirVencedorView(self.jogadores, self.canal)
+            await self.canal.send("🏆 **A partida foi iniciada!** Assim que terminar, defina o vencedor ou feche a partida abaixo (Apenas Administradores):", view=view_vencedor)
+
+            # 2. Envia o .cs POR ÚLTIMO (via Webhook) para garantir que seja a última mensagem do canal
             try:
                 webhooks = await self.canal.webhooks()
                 webhook = webhooks[0] if webhooks else await self.canal.create_webhook(name="RoomHelper")
                 await webhook.send(content=".cs", username=interaction.user.display_name, avatar_url=interaction.user.display_avatar.url)
             except Exception as e:
-                # Caso ocorra algum erro no webhook, envia direto pela mensagem normal
                 await self.canal.send(".cs")
-
-            view_vencedor = DefinirVencedorView(self.jogadores, self.canal)
-            await self.canal.send("🏆 **A partida foi iniciada!** Assim que terminar, defina o vencedor ou feche a partida abaixo (Apenas Administradores):", view=view_vencedor)
 
 class DefinirVencedorView(discord.ui.View):
     def __init__(self, jogadores, canal):
@@ -404,7 +404,7 @@ async def removerfila(ctx, membro: discord.Member):
                     dados["mensagem"] = None
 
     if removido:
-        await ctx.send(f"🧹 O usuário {membro.mention} foi **removido de todas las filas** ativas por um administrador.")
+        await ctx.send(f"🧹 O usuário {membro.mention} foi **removido de todas as filas** ativas por um administrador.")
     else:
         await ctx.send(f"⚠️ O usuário {membro.mention} não está em nenhuma fila no momento.")
 
