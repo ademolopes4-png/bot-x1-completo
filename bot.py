@@ -42,7 +42,6 @@ def gerar_texto_ranking():
     
     return "\n".join(linhas)
 
-# Dicionários globais para gerenciar filas e painel
 filas = {
     "1v1": {"Taxa R$ 0,30": {"usuarios": [], "mensagem": None}},
     "2v2": {"R$ 2,00": {"usuarios": [], "mensagem": None}, "R$ 4,00": {"usuarios": [], "mensagem": None}},
@@ -55,7 +54,6 @@ painel_mensagem_ref = None
 async def on_ready():
     print(f"Bot conectado como {bot.user}")
 
-# --- VIEW DO PAINEL PRINCIPAL ---
 class PainelCompletoView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -153,7 +151,6 @@ async def entrar_na_fila(interaction: discord.Interaction, modo: str, subcategor
         await interaction.response.send_message(f"🚀 **Fila completa para {modo} ({subcategoria})!** Criando canal privado...", ephemeral=True)
         await criar_canal_partida(interaction.guild, modo, subcategoria, jogadores_partida)
 
-# --- VIEW DO BOTÃO DE SAIR DA FILA ---
 class SairFilaView(discord.ui.View):
     def __init__(self, modo, subcategoria):
         super().__init__(timeout=None)
@@ -192,7 +189,7 @@ class SairFilaView(discord.ui.View):
 async def criar_canal_partida(guild: discord.Guild, modo: str, subcategoria: str, jogadores: list):
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(read_messages=False),
-        guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_webhooks=True)
     }
     
     for jogador in jogadores:
@@ -210,7 +207,6 @@ async def criar_canal_partida(guild: discord.Guild, modo: str, subcategoria: str
     )
     await canal.send(content=mencoes, embed=embed, view=view)
 
-# --- VIEW DE CONFIRMAÇÃO DE PARTIDA ---
 class ConfirmarPartidaView(discord.ui.View):
     def __init__(self, jogadores, canal):
         super().__init__(timeout=None)
@@ -234,15 +230,23 @@ class ConfirmarPartidaView(discord.ui.View):
             
             for child in self.children:
                 child.disabled = True
-            await interaction.message.edit(view=self)
+            try:
+                await interaction.message.edit(view=self)
+            except:
+                pass
 
-            # Envia puramente o comando .cs isolado
-            await self.canal.send(".cs")
+            # Cria um Webhook temporário para enviar o .cs simulando um usuário real e ativar o bot de salas
+            try:
+                webhooks = await self.canal.webhooks()
+                webhook = webhooks[0] if webhooks else await self.canal.create_webhook(name="RoomHelper")
+                await webhook.send(content=".cs", username=interaction.user.display_name, avatar_url=interaction.user.display_avatar.url)
+            except Exception as e:
+                # Caso ocorra algum erro no webhook, envia direto pela mensagem normal
+                await self.canal.send(".cs")
 
             view_vencedor = DefinirVencedorView(self.jogadores, self.canal)
             await self.canal.send("🏆 **A partida foi iniciada!** Assim que terminar, defina o vencedor ou feche a partida abaixo (Apenas Administradores):", view=view_vencedor)
 
-# --- VIEW DE DEFINIR VENCEDOR E FECHAR CANAL (APENAS ADMINS) ---
 class DefinirVencedorView(discord.ui.View):
     def __init__(self, jogadores, canal):
         super().__init__(timeout=None)
@@ -260,7 +264,6 @@ class VencedorButton(discord.ui.Button):
         self.vencedor = vencedor
 
     async def callback(self, interaction: discord.Interaction):
-        # Validação de Administrador
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Apenas **Administradores** podem definir o vencedor da partida!", ephemeral=True)
             return
@@ -298,7 +301,6 @@ class FecharCanalButton(discord.ui.Button):
         super().__init__(style=discord.ButtonStyle.danger, label="🔒 Fechar Canal", row=row, emoji="✖️")
 
     async def callback(self, interaction: discord.Interaction):
-        # Validação de Administrador
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Apenas **Administradores** podem fechar este canal!", ephemeral=True)
             return
@@ -317,8 +319,6 @@ class FecharCanalButton(discord.ui.Button):
             await interaction.channel.delete()
         except:
             pass
-
-# --- COMANDOS EXCLUSIVOS PARA ADMINISTRADORES ---
 
 @bot.command(name="painel")
 async def painel(ctx):
@@ -358,7 +358,7 @@ async def addvitorias_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("❌ Você precisa ser **Administrador** para usar este comando!")
     else:
-        await ctx.send("⚠️ Uso correto: `!addvitorias @usuario quantidade` (Ex: `!addvitorias @fulano 2`)")
+        await ctx.send("⚠️ Uso correto: `!addvitorias @usuario quantidade`")
 
 @bot.command(name="removervitorias")
 @commands.has_permissions(administrator=True)
@@ -383,7 +383,7 @@ async def removervitorias_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("❌ Você precisa ser **Administrador** para usar este comando!")
     else:
-        await ctx.send("⚠️ Uso correto: `!removervitorias @usuario quantidade` (Ex: `!removervitorias @fulano 1`)")
+        await ctx.send("⚠️ Uso correto: `!removervitorias @usuario quantidade`")
 
 @bot.command(name="removerfila")
 @commands.has_permissions(administrator=True)
@@ -404,7 +404,7 @@ async def removerfila(ctx, membro: discord.Member):
                     dados["mensagem"] = None
 
     if removido:
-        await ctx.send(f"🧹 O usuário {membro.mention} foi **removido de todas as filas** ativas por um administrador.")
+        await ctx.send(f"🧹 O usuário {membro.mention} foi **removido de todas las filas** ativas por um administrador.")
     else:
         await ctx.send(f"⚠️ O usuário {membro.mention} não está em nenhuma fila no momento.")
 
