@@ -116,6 +116,22 @@ async def atribuir_mvp_semanal():
                 except:
                     pass
 
+# Função para enviar logs para o canal de auditoria
+async def enviar_log_partida(guild: discord.Guild, nome_fila: str, jogadores: list, resultado: str, admin_responsavel: str):
+    canal_log = discord.utils.get(guild.text_channels, name="logs-partidas")
+    if canal_log:
+        mencoes_jogadores = ", ".join([j.mention for j in jogadores])
+        embed = discord.Embed(
+            title="📊 LOG DE AUDITORIA DE PARTIDA",
+            color=0x00ffcc,
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name="⚔️ Modo / Fila", value=nome_fila, inline=False)
+        embed.add_field(name="👥 Jogadores", value=mencoes_jogadores, inline=False)
+        embed.add_field(name="🏆 Resultado / Ação", value=resultado, inline=False)
+        embed.add_field(name="🛡️ Administrador Responsável", value=admin_responsavel, inline=False)
+        await canal_log.send(embed=embed)
+
 class PainelCompletoView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -263,7 +279,7 @@ async def criar_canal_partida(guild: discord.Guild, nome_fila: str, jogadores: l
     canal = await guild.create_text_channel(name=f"⚔️-{nome_fila}".replace(" ", "-").replace("---", "-").lower(), overwrites=overwrites)
     mencoes = ", ".join([j.mention for j in jogadores])
     
-    view = DefinirVencedorView(jogadores, canal)
+    view = DefinirVencedorView(jogadores, canal, nome_fila)
     embed = discord.Embed(
         title=f"Partida de {nome_fila}",
         description=f"Jogadores: {mencoes}\n\n**Canal pronto! Crie a sala manualmente e gerencie abaixo:**",
@@ -272,21 +288,24 @@ async def criar_canal_partida(guild: discord.Guild, nome_fila: str, jogadores: l
     await canal.send(content=f"Olá macaquitos 🦧 {mencoes}", embed=embed, view=view)
 
 class DefinirVencedorView(discord.ui.View):
-    def __init__(self, jogadores, canal):
+    def __init__(self, jogadores, canal, nome_fila):
         super().__init__(timeout=None)
         self.jogadores = jogadores
         self.canal = canal
+        self.nome_fila = nome_fila
 
         for i, jogador in enumerate(jogadores):
-            self.add_item(VencedorButton(jogador, label=f"Vencedor: {jogador.display_name}", row=i//2))
+            self.add_item(VencedorButton(jogador, label=f"Vencedor: {jogador.display_name}", row=i//2, nome_fila=nome_fila, jogadores=jogadores))
         
-        self.add_item(WOPartidaButton(jogadores, row=2))
-        self.add_item(FecharCanalButton(row=2))
+        self.add_item(WOPartidaButton(jogadores, row=2, nome_fila=nome_fila))
+        self.add_item(FecharCanalButton(row=2, nome_fila=nome_fila, jogadores=jogadores))
 
 class VencedorButton(discord.ui.Button):
-    def __init__(self, vencedor, label, row):
+    def __init__(self, vencedor, label, row, nome_fila, jogadores):
         super().__init__(style=discord.ButtonStyle.primary, label=label, row=row)
         self.vencedor = vencedor
+        self.nome_fila = nome_fila
+        self.jogadores = jogadores
 
     async def callback(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
@@ -304,6 +323,15 @@ class VencedorButton(discord.ui.Button):
         salvar_ranking(ranking_data)
         await atualizar_painel_global()
 
+        # Envia o registro para o canal de logs
+        await enviar_log_partida(
+            interaction.guild, 
+            self.nome_fila, 
+            self.jogadores, 
+            f"🏆 Vencedor: **{self.vencedor.display_name}** (+10 pts)", 
+            interaction.user.display_name
+        )
+
         await interaction.response.send_message(f"🏆 **Vitória contabilizada para {self.vencedor.mention}!** (+10 pts)\n🔒 Canal apagando em 5 segundos...", ephemeral=False)
         
         for child in self.view.children:
@@ -320,15 +348,24 @@ class VencedorButton(discord.ui.Button):
             pass
 
 class WOPartidaButton(discord.ui.Button):
-    def __init__(self, jogadores, row):
+    def __init__(self, jogadores, row, nome_fila):
         super().__init__(style=discord.ButtonStyle.danger, label="⚠️ Aplicar WO", row=row, emoji="🚫")
         self.jogadores = jogadores
+        self.nome_fila = nome_fila
 
     async def callback(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Apenas Administradores podem aplicar WO!", ephemeral=True)
             return
         
+        await enviar_log_partida(
+            interaction.guild, 
+            self.nome_fila, 
+            self.jogadores, 
+            "⚠️ Partida cancelada por **WO / Desistência**", 
+            interaction.user.display_name
+        )
+
         await interaction.response.send_message("⚠️ **WO Aplicado!** Esta partida foi cancelada por desistência/ausência.", ephemeral=False)
         for child in self.view.children:
             child.disabled = True
@@ -344,13 +381,23 @@ class WOPartidaButton(discord.ui.Button):
             pass
 
 class FecharCanalButton(discord.ui.Button):
-    def __init__(self, row):
+    def __init__(self, row, nome_fila, jogadores):
         super().__init__(style=discord.ButtonStyle.secondary, label="🔒 Fechar", row=row, emoji="✖️")
+        self.nome_fila = nome_fila
+        self.jogadores = jogadores
 
     async def callback(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Apenas Administradores!", ephemeral=True)
             return
+
+        await enviar_log_partida(
+            interaction.guild, 
+            self.nome_fila, 
+            self.jogadores, 
+            "🔒 Canal encerrado manualmente sem vencedor definido", 
+            interaction.user.display_name
+        )
 
         await interaction.response.send_message("🔒 Canal encerrado manualmente!", ephemeral=False)
         for child in self.view.children:
@@ -436,3 +483,4 @@ keep_alive()
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
     bot.run(TOKEN)
+
