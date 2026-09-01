@@ -42,10 +42,12 @@ def gerar_texto_ranking():
     
     return "\n".join(linhas)
 
+# Estrutura das filas atualizada conforme solicitado
 filas = {
-    "1v1": {"Taxa R$ 0,30": {"usuarios": [], "mensagem": None}},
-    "2v2": {"R$ 2,00": {"usuarios": [], "mensagem": None}, "R$ 4,00": {"usuarios": [], "mensagem": None}},
-    "3v3": {"R$ 3,00": {"usuarios": [], "mensagem": None}, "R$ 6,00": {"usuarios": [], "mensagem": None}}
+    "1v1 - Gelo Normal": {"usuarios": [], "mensagem": None, "limite": 2},
+    "1v1 - Gelo Infinito": {"usuarios": [], "mensagem": None, "limite": 2},
+    "2v2": {"usuarios": [], "mensagem": None, "limite": 4},
+    "3v3": {"usuarios": [], "mensagem": None, "limite": 6}
 }
 
 painel_mensagem_ref = None
@@ -58,27 +60,23 @@ class PainelCompletoView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="1v1 - Taxa R$ 0,30", style=discord.ButtonStyle.green, custom_id="1v1_taxa", emoji="🪙", row=0)
-    async def f_1v1_taxa(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await entrar_na_fila(interaction, "1v1", "Taxa R$ 0,30", 2)
+    @discord.ui.button(label="1v1 Gelo Normal", style=discord.ButtonStyle.green, custom_id="1v1_normal", emoji="🧊", row=0)
+    async def f_1v1_normal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await gerenciar_fila(interaction, "1v1 - Gelo Normal")
 
-    @discord.ui.button(label="2v2 - R$ 2,00", style=discord.ButtonStyle.blurple, custom_id="2v2_2rs", emoji="💵", row=1)
-    async def f_2v2_2rs(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await entrar_na_fila(interaction, "2v2", "R$ 2,00", 4)
+    @discord.ui.button(label="1v1 Gelo Infinito", style=discord.ButtonStyle.blurple, custom_id="1v1_infinito", emoji="❄️", row=0)
+    async def f_1v1_infinito(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await gerenciar_fila(interaction, "1v1 - Gelo Infinito")
 
-    @discord.ui.button(label="2v2 - R$ 4,00", style=discord.ButtonStyle.blurple, custom_id="2v2_4rs", emoji="💵", row=1)
-    async def f_2v2_4rs(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await entrar_na_fila(interaction, "2v2", "R$ 4,00", 4)
+    @discord.ui.button(label="2v2", style=discord.ButtonStyle.grey, custom_id="2v2_normal", emoji="👥", row=1)
+    async def f_2v2(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await gerenciar_fila(interaction, "2v2")
 
-    @discord.ui.button(label="3v3 - R$ 3,00", style=discord.ButtonStyle.grey, custom_id="3v3_3rs", emoji="💵", row=2)
-    async def f_3v3_3rs(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await entrar_na_fila(interaction, "3v3", "R$ 3,00", 6)
+    @discord.ui.button(label="3v3", style=discord.ButtonStyle.grey, custom_id="3v3_normal", emoji="🛡️", row=1)
+    async def f_3v3(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await gerenciar_fila(interaction, "3v3")
 
-    @discord.ui.button(label="3v3 - R$ 6,00", style=discord.ButtonStyle.grey, custom_id="3v3_6rs", emoji="💵", row=2)
-    async def f_3v3_6rs(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await entrar_na_fila(interaction, "3v3", "R$ 6,00", 6)
-
-    @discord.ui.button(label="Ver Ranking Geral", style=discord.ButtonStyle.secondary, custom_id="btn_ranking", emoji="🏆", row=3)
+    @discord.ui.button(label="Ver Ranking Geral", style=discord.ButtonStyle.secondary, custom_id="btn_ranking", emoji="🏆", row=2)
     async def ver_ranking(self, interaction: discord.Interaction, button: discord.ui.Button):
         texto_ranking = gerar_texto_ranking()
         embed = discord.Embed(
@@ -103,39 +101,25 @@ async def atualizar_painel_global():
         except:
             pass
 
-async def entrar_na_fila(interaction: discord.Interaction, modo: str, subcategoria: str, limite: int):
+async def gerenciar_fila(interaction: discord.Interaction, nome_fila: str):
     user = interaction.user
-    dados_fila = filas[modo][subcategoria]
+    dados_fila = filas[nome_fila]
     lista = dados_fila["usuarios"]
 
-    if user in lista:
-        await interaction.response.send_message("Você já está nessa fila!", ephemeral=True)
-        return
+    # Verifica se o usuário já está em OUTRA fila ativa
+    for f_nome, f_dados in filas.items():
+        if user in f_dados["usuarios"]:
+            if f_nome == nome_fila:
+                await interaction.response.send_message("Você já está nesta fila!", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"❌ Você já está na fila **{f_nome}**. Saia dela antes de entrar em outra!", ephemeral=True)
+            return
 
     lista.append(user)
+    limite = dados_fila["limite"]
     
     if len(lista) < limite:
-        mencoes_fila = "\n".join([f"{m.mention}" for m in lista])
-        embed = discord.Embed(
-            title=f"⚔️ Fila: {modo} | {subcategoria}",
-            description=f"**Jogadores na fila:**\n{mencoes_fila}\n\n⏳ *Aguardando o restante dos jogadores...*",
-            color=0xff9900
-        )
-        embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
-        
-        view = SairFilaView(modo, subcategoria)
-
-        if dados_fila["mensagem"]:
-            try:
-                await dados_fila["mensagem"].edit(embed=embed, view=view)
-                await interaction.response.defer()
-            except:
-                msg = await interaction.channel.send(embed=embed, view=view)
-                dados_fila["mensagem"] = msg
-                await interaction.response.defer()
-        else:
-            await interaction.response.send_message(embed=embed, view=view)
-            dados_fila["mensagem"] = await interaction.original_response()
+        await atualizar_embed_fila(interaction, nome_fila, primeira_vez=not dados_fila["mensagem"])
     else:
         jogadores_partida = lista[:limite]
         
@@ -146,21 +130,49 @@ async def entrar_na_fila(interaction: discord.Interaction, modo: str, subcategor
                 pass
             dados_fila["mensagem"] = None
 
-        filas[modo][subcategoria]["usuarios"] = []
+        filas[nome_fila]["usuarios"] = []
 
-        await interaction.response.send_message(f"🚀 **Fila completa para {modo} ({subcategoria})!** Criando canal privado...", ephemeral=True)
-        await criar_canal_partida(interaction.guild, modo, subcategoria, jogadores_partida)
+        await interaction.response.send_message(f"🚀 **Fila completa para {nome_fila}!** Criando canal privado...", ephemeral=True)
+        await criar_canal_partida(interaction.guild, nome_fila, jogadores_partida)
 
-class SairFilaView(discord.ui.View):
-    def __init__(self, modo, subcategoria):
+async def atualizar_embed_fila(interaction: discord.Interaction, nome_fila: str, primeira_vez=False):
+    dados_fila = filas[nome_fila]
+    lista = dados_fila["usuarios"]
+    
+    mencoes_fila = "\n".join([f"{m.mention}" for m in lista]) if lista else "*Nenhum jogador na fila*"
+    
+    embed = discord.Embed(
+        title=f"⚔️ Fila: {nome_fila}",
+        description=f"**Jogadores:**\n{mencoes_fila}\n\n⏳ *Aguardando o restante dos jogadores...*",
+        color=0xff9900
+    )
+    embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
+    
+    view = FilaAcoesView(nome_fila)
+
+    if primeira_vez:
+        await interaction.response.send_message(embed=embed, view=view)
+        dados_fila["mensagem"] = await interaction.original_response()
+    else:
+        try:
+            await interaction.response.edit_message(embed=embed, view=view)
+        except:
+            if dados_fila["mensagem"]:
+                await dados_fila["mensagem"].edit(embed=embed, view=view)
+
+class FilaAcoesView(discord.ui.View):
+    def __init__(self, nome_fila):
         super().__init__(timeout=None)
-        self.modo = modo
-        self.subcategoria = subcategoria
+        self.nome_fila = nome_fila
 
-    @discord.ui.button(label="Sair da Fila", style=discord.ButtonStyle.danger, emoji="✖️")
+    @discord.ui.button(label="Entrar na Fila", style=discord.ButtonStyle.green, emoji="➕", custom_id="btn_entrar")
+    async def entrar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await gerenciar_fila(interaction, self.nome_fila)
+
+    @discord.ui.button(label="Sair", style=discord.ButtonStyle.danger, emoji="✖️", custom_id="btn_sair")
     async def sair(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
-        dados_fila = filas[self.modo][self.subcategoria]
+        dados_fila = filas[self.nome_fila]
         lista = dados_fila["usuarios"]
 
         if user in lista:
@@ -169,8 +181,8 @@ class SairFilaView(discord.ui.View):
             if len(lista) > 0:
                 mencoes_fila = "\n".join([f"{m.mention}" for m in lista])
                 embed = discord.Embed(
-                    title=f"⚔️ Fila: {self.modo} | {self.subcategoria}",
-                    description=f"**Jogadores na fila:**\n{mencoes_fila}\n\n⏳ *Aguardando o restante dos jogadores...*",
+                    title=f"⚔️ Fila: {self.nome_fila}",
+                    description=f"**Jogadores:**\n{mencoes_fila}\n\n⏳ *Aguardando o restante dos jogadores...*",
                     color=0xff9900
                 )
                 embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
@@ -186,7 +198,7 @@ class SairFilaView(discord.ui.View):
         else:
             await interaction.response.send_message("Você não está nesta fila!", ephemeral=True)
 
-async def criar_canal_partida(guild: discord.Guild, modo: str, subcategoria: str, jogadores: list):
+async def criar_canal_partida(guild: discord.Guild, nome_fila: str, jogadores: list):
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(read_messages=False),
         guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_webhooks=True)
@@ -195,18 +207,18 @@ async def criar_canal_partida(guild: discord.Guild, modo: str, subcategoria: str
     for jogador in jogadores:
         overwrites[jogador] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-    canal = await guild.create_text_channel(name=f"⚔️-{modo}-{subcategoria}".replace("$", "").replace(",", "").replace(" ", "-").lower(), overwrites=overwrites)
+    canal = await guild.create_text_channel(name=f"⚔️-{nome_fila}".replace(" ", "-").replace("---", "-").lower(), overwrites=overwrites)
 
     mencoes = ", ".join([j.mention for j in jogadores])
     
     view = ConfirmarPartidaView(jogadores, canal)
     embed = discord.Embed(
-        title=f"Partida de {modo} | {subcategoria}",
-        description=f"Jogadores: {mencoes}\n\n**Combinem suas regras, o valor da aposta e confirme a partida abaixo!**",
+        title=f"Partida de {nome_fila}",
+        description=f"Jogadores: {mencoes}\n\n**Combinem suas regras e confirmem a partida abaixo!**",
         color=0xff0000
     )
     
-    # Envia a saudação "Olá macaquitos 🦧" junto com as menções dos jogadores e administradores (ou canal) se necessário
+    # Mensagem de saudação solicitada e menção aos jogadores
     await canal.send(content=f"Olá macaquitos 🦧 {mencoes}", embed=embed, view=view)
 
 class ConfirmarPartidaView(discord.ui.View):
@@ -228,7 +240,7 @@ class ConfirmarPartidaView(discord.ui.View):
         if restantes > 0:
             await interaction.response.send_message(f"✅ {interaction.user.mention} confirmou! Faltam **{restantes}** confirmações.", ephemeral=False)
         else:
-            await interaction.response.send_message("🎉 **Todas as confirmações realizadas!** Sala pronta para criação manual.", ephemeral=False)
+            await interaction.response.send_message("🎉 **Todas as confirmações realizadas!** Crie a sala manualmente.", ephemeral=False)
             
             for child in self.children:
                 child.disabled = True
@@ -238,7 +250,7 @@ class ConfirmarPartidaView(discord.ui.View):
                 pass
 
             view_vencedor = DefinirVencedorView(self.jogadores, self.canal)
-            await self.canal.send("🏆 **A partida foi iniciada!** Assim que criar a sala e terminar, defina o vencedor ou feche a partida abaixo (Apenas Administradores):", view=view_vencedor)
+            await self.canal.send("🏆 **A partida foi iniciada!** Assim que terminar, defina o vencedor ou feche a partida abaixo (Apenas Administradores):", view=view_vencedor)
 
 class DefinirVencedorView(discord.ui.View):
     def __init__(self, jogadores, canal):
@@ -383,18 +395,17 @@ async def removervitorias_error(ctx, error):
 async def removerfila(ctx, membro: discord.Member):
     removido = False
     
-    for modo, subcategorias in filas.items():
-        for sub, dados in subcategorias.items():
-            if membro in dados["usuarios"]:
-                dados["usuarios"].remove(membro)
-                removido = True
-                
-                if len(dados["usuarios"]) == 0 and dados["mensagem"]:
-                    try:
-                        await dados["mensagem"].delete()
-                    except:
-                        pass
-                    dados["mensagem"] = None
+    for modo, dados in filas.items():
+        if membro in dados["usuarios"]:
+            dados["usuarios"].remove(membro)
+            removido = True
+            
+            if len(dados["usuarios"]) == 0 and dados["mensagem"]:
+                try:
+                    await dados["mensagem"].delete()
+                except:
+                    pass
+                dados["mensagem"] = None
 
     if removido:
         await ctx.send(f"🧹 O usuário {membro.mention} foi **removido de todas as filas** ativas por um administrador.")
@@ -415,3 +426,4 @@ if TOKEN:
     bot.run(TOKEN)
 else:
     print("ERRO: DISCORD_TOKEN não encontrado nas variáveis de ambiente!")
+
