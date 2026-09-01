@@ -27,7 +27,6 @@ def salvar_ranking(dados):
     with open(RANKING_FILE, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
 
-# Função para gerar apenas o TOP 4 para a mensagem principal
 def gerar_texto_top4():
     ranking_data = carregar_ranking()
     if not ranking_data:
@@ -41,7 +40,6 @@ def gerar_texto_top4():
         tag_medalha = medalhas[i] if i < len(medalhas) else f"{i+1}º"
         linhas.append(f"{tag_medalha} **{dados['nome']}** — 🏆 {dados['vitorias']} vitórias ({dados['pontos']} pts)")
     
-    # Se houver menos de 4, completa os espaços vazios visualmente
     while len(linhas) < 4:
         i = len(linhas)
         medalha_vazia = ["🥇", "🥈", "🥉", "4º"][i]
@@ -49,7 +47,6 @@ def gerar_texto_top4():
 
     return "\n".join(linhas)
 
-# Função para gerar o ranking completo (para o botão)
 def gerar_texto_ranking_geral():
     ranking_data = carregar_ranking()
     if not ranking_data:
@@ -86,7 +83,7 @@ async def verificar_inatividade_filas():
     agora = time.time()
     for nome_fila, dados in filas.items():
         if dados["usuarios"] and dados["tempo_criacao"]:
-            if agora - dados["tempo_criacao"] > 900:  # 15 minutos
+            if agora - dados["tempo_criacao"] > 900:
                 if dados["mensagem"]:
                     try:
                         await dados["mensagem"].delete()
@@ -101,7 +98,8 @@ async def atribuir_mvp_semanal():
     for guild in bot.guilds:
         ranking_data = carregar_ranking()
         if not ranking_data:
-        data = max(ranking_data.items(), key=lambda x: x[1]["vitorias"])[0]
+            continue
+        top_user_id = max(ranking_data.items(), key=lambda x: x[1]["vitorias"])[0]
         membro = guild.get_member(int(top_user_id))
         
         if membro:
