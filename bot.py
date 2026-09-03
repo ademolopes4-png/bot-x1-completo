@@ -65,7 +65,7 @@ def gerar_texto_ranking_geral():
 filas = {
     "1v1 - Gelo Normal": {"usuarios": [], "mensagem": None, "limite": 2, "tempo_criacao": None},
     "1v1 - Gelo Infinito": {"usuarios": [], "mensagem": None, "limite": 2, "tempo_criacao": None},
-    "Fila de Times": {"usuarios": [], "mensagem": None, "limite": 4, "tempo_criacao": None}
+    "Fila de Times": {"usuarios": [], "mensagem": None, "limite": 2, "tempo_criacao": None}
 }
 
 painel_mensagem_ref = None
@@ -272,12 +272,11 @@ async def iniciar_confirmacao_partida(guild: discord.Guild, nome_fila: str, joga
     
     embed = discord.Embed(
         title=f"⚔️ Confirmação de Partida: {nome_fila}",
-        description=f"Jogadores encontrados: {mencoes}\n\n⏳ **Todos devem confirmar a partida clicando abaixo em até 60 segundos!**",
+        description=f"Jogadores encontrados: {mencoes}\n\n⏳ **Ambos devem confirmar a partida clicando abaixo em até 60 segundos!**",
         color=0x00ffcc
     )
     embed.set_footer(text="@Dz desenvolvedor")
     
-    # Envia no canal onde a fila fechou ou em um canal de avisos
     canal_atual = guild.system_channel or guild.text_channels[0]
     msg = await canal_atual.send(content=mencoes, embed=embed, view=view)
     view.mensagem_ref = msg
@@ -309,7 +308,7 @@ class ConfirmacaoPartidaView(discord.ui.View):
             await criar_canal_partida(self.guild, self.nome_fila, self.jogadores)
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, emoji="❌")
-    async def cancelar(self, interaction: discord.Interaction,вальet=None):
+    async def cancelar(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user not in self.jogadores and not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Apenas os jogadores da partida ou administradores podem cancelar!", ephemeral=True)
             return
@@ -348,7 +347,6 @@ async def criar_canal_partida(guild: discord.Guild, nome_fila: str, jogadores: l
     canal = await guild.create_text_channel(name=f"⚔️-{nome_fila}".replace(" ", "-").replace("---", "-").lower(), overwrites=overwrites)
     mencoes = ", ".join([j.mention for j in jogadores])
     
-    # Busca o cargo de Administrador para marcar junto
     cargo_adm = discord.utils.get(guild.roles, name="Administrador") or discord.utils.get(guild.roles, name="Admin")
     mencao_adm = cargo_adm.mention if cargo_adm else "@Admin"
 
@@ -360,7 +358,6 @@ async def criar_canal_partida(guild: discord.Guild, nome_fila: str, jogadores: l
     )
     embed.set_footer(text="@Dz desenvolvedor")
     
-    # Mensagem destacada exigida com a marcação do cargo de admin e das duas pessoas
     texto_zoeira = f"Calma seus filha duma puta eu fui criado agora pouco não sei criar sala sozinho ainda 😡 {mencao_adm} {mencoes}"
     await canal.send(content=texto_zoeira, embed=embed, view=view)
 
@@ -560,3 +557,4 @@ keep_alive()
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
     bot.run(TOKEN)
+
