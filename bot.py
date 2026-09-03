@@ -162,7 +162,7 @@ async def atualizar_painel_global():
                 description=f"{texto_top4}\n\n---------------------------------------------\n⚔️ **ESCOLHA SUA FILA ABAIXO:**",
                 color=0xffd700
             )
-            embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
+            embed.set_thumbnail(url="https://i.ibb.co/V1n8m0v/mia.jpg")
             embed.set_footer(text="@Dz desenvolvedor")
             await painel_mensagem_ref.edit(embed=embed)
         except:
@@ -215,7 +215,7 @@ async def atualizar_embed_fila(interaction: discord.Interaction, nome_fila: str,
         description=f"**Jogadores:**\n{mencoes_fila}\n\n⏳ *Aguardando o restante dos jogadores...*",
         color=0xff9900
     )
-    embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
+    embed.set_thumbnail(url="https://i.ibb.co/V1n8m0v/mia.jpg")
     embed.set_footer(text="@Dz desenvolvedor")
     view = FilaAcoesView(nome_fila)
 
@@ -495,7 +495,7 @@ async def painel(ctx):
         description=f"{texto_top4}\n\n---------------------------------------------\n⚔️ **ESCOLHA SUA FILA ABAIXO:**",
         color=0xffd700
     )
-    embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
+    embed.set_thumbnail(url="https://i.ibb.co/V1n8m0v/mia.jpg")
     embed.set_footer(text="@Dz desenvolvedor")
     view = PainelCompletoView()
     painel_mensagem_ref = await ctx.send(embed=embed, view=view)
