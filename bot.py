@@ -65,8 +65,7 @@ def gerar_texto_ranking_geral():
 filas = {
     "1v1 - Gelo Normal": {"usuarios": [], "mensagem": None, "limite": 2, "tempo_criacao": None},
     "1v1 - Gelo Infinito": {"usuarios": [], "mensagem": None, "limite": 2, "tempo_criacao": None},
-    "2v2": {"usuarios": [], "mensagem": None, "limite": 4, "tempo_criacao": None},
-    "3v3": {"usuarios": [], "mensagem": None, "limite": 6, "tempo_criacao": None}
+    "Fila de Times": {"usuarios": [], "mensagem": None, "limite": 4, "tempo_criacao": None}
 }
 
 painel_mensagem_ref = None
@@ -116,7 +115,6 @@ async def atribuir_mvp_semanal():
                 except:
                     pass
 
-# Função para enviar logs para o canal de auditoria
 async def enviar_log_partida(guild: discord.Guild, nome_fila: str, jogadores: list, resultado: str, admin_responsavel: str):
     canal_log = discord.utils.get(guild.text_channels, name="logs-partidas")
     if canal_log:
@@ -144,13 +142,9 @@ class PainelCompletoView(discord.ui.View):
     async def f_1v1_infinito(self, interaction: discord.Interaction, button: discord.ui.Button):
         await gerenciar_fila(interaction, "1v1 - Gelo Infinito")
 
-    @discord.ui.button(label="2v2", style=discord.ButtonStyle.grey, custom_id="2v2_normal", emoji="👥", row=1)
-    async def f_2v2(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await gerenciar_fila(interaction, "2v2")
-
-    @discord.ui.button(label="3v3", style=discord.ButtonStyle.grey, custom_id="3v3_normal", emoji="🛡️", row=1)
-    async def f_3v3(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await gerenciar_fila(interaction, "3v3")
+    @discord.ui.button(label="Fila de Times", style=discord.ButtonStyle.grey, custom_id="fila_times", emoji="👥", row=1)
+    async def f_times(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await gerenciar_fila(interaction, "Fila de Times")
 
     @discord.ui.button(label="Ver Ranking Geral", style=discord.ButtonStyle.secondary, custom_id="btn_ranking", emoji="🏆", row=2)
     async def ver_ranking(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -169,6 +163,7 @@ async def atualizar_painel_global():
                 color=0xffd700
             )
             embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
+            embed.set_footer(text="@Dz desenvolvedor")
             await painel_mensagem_ref.edit(embed=embed)
         except:
             pass
@@ -207,8 +202,8 @@ async def gerenciar_fila(interaction: discord.Interaction, nome_fila: str):
         filas[nome_fila]["usuarios"] = []
         filas[nome_fila]["tempo_criacao"] = None
 
-        await interaction.response.send_message(f"🚀 **Fila completa para {nome_fila}!** Criando canal privado...", ephemeral=True)
-        await criar_canal_partida(interaction.guild, nome_fila, jogadores_partida)
+        await interaction.response.send_message(f"🚀 **Fila completa para {nome_fila}!** Iniciando confirmação...", ephemeral=True)
+        await iniciar_confirmacao_partida(interaction.guild, nome_fila, jogadores_partida)
 
 async def atualizar_embed_fila(interaction: discord.Interaction, nome_fila: str, primeira_vez=False):
     dados_fila = filas[nome_fila]
@@ -221,6 +216,7 @@ async def atualizar_embed_fila(interaction: discord.Interaction, nome_fila: str,
         color=0xff9900
     )
     embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
+    embed.set_footer(text="@Dz desenvolvedor")
     view = FilaAcoesView(nome_fila)
 
     if primeira_vez:
@@ -256,6 +252,7 @@ class FilaAcoesView(discord.ui.View):
             if len(lista) > 0:
                 mencoes_fila = "\n".join([f"{m.mention}" for m in lista])
                 embed = discord.Embed(title=f"⚔️ Fila: {self.nome_fila}", description=f"**Jogadores:**\n{mencoes_fila}\n\n⏳ *Aguardando...*", color=0xff9900)
+                embed.set_footer(text="@Dz desenvolvedor")
                 await interaction.response.edit_message(embed=embed, view=self)
             else:
                 if dados_fila["mensagem"]:
@@ -268,6 +265,78 @@ class FilaAcoesView(discord.ui.View):
         else:
             await interaction.response.send_message("Você não está nesta fila!", ephemeral=True)
 
+# --- SISTEMA DE CONFIRMAÇÃO DE PARTIDA ---
+async def iniciar_confirmacao_partida(guild: discord.Guild, nome_fila: str, jogadores: list):
+    mencoes = ", ".join([j.mention for j in jogadores])
+    view = ConfirmacaoPartidaView(jogadores, nome_fila, guild)
+    
+    embed = discord.Embed(
+        title=f"⚔️ Confirmação de Partida: {nome_fila}",
+        description=f"Jogadores encontrados: {mencoes}\n\n⏳ **Todos devem confirmar a partida clicando abaixo em até 60 segundos!**",
+        color=0x00ffcc
+    )
+    embed.set_footer(text="@Dz desenvolvedor")
+    
+    # Envia no canal onde a fila fechou ou em um canal de avisos
+    canal_atual = guild.system_channel or guild.text_channels[0]
+    msg = await canal_atual.send(content=mencoes, embed=embed, view=view)
+    view.mensagem_ref = msg
+
+class ConfirmacaoPartidaView(discord.ui.View):
+    def __init__(self, jogadores, nome_fila, guild):
+        super().__init__(timeout=60)
+        self.jogadores = jogadores
+        self.nome_fila = nome_fila
+        self.guild = guild
+        self.confirmados = set()
+        self.mensagem_ref = None
+
+    @discord.ui.button(label="Confirmar", style=discord.ButtonStyle.green, emoji="✅")
+    async def confirmar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user not in self.jogadores:
+            await interaction.response.send_message("❌ Você não faz parte desta partida!", ephemeral=True)
+            return
+        
+        self.confirmados.add(interaction.user)
+        await interaction.response.send_message(f"✅ Você confirmou a partida!", ephemeral=True)
+
+        if len(self.confirmados) == len(self.jogadores):
+            self.stop()
+            try:
+                await self.mensagem_ref.delete()
+            except:
+                pass
+            await criar_canal_partida(self.guild, self.nome_fila, self.jogadores)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, emoji="❌")
+    async def cancelar(self, interaction: discord.Interaction,вальet=None):
+        if interaction.user not in self.jogadores and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Apenas os jogadores da partida ou administradores podem cancelar!", ephemeral=True)
+            return
+        
+        self.stop()
+        try:
+            await self.mensagem_ref.delete()
+        except:
+            pass
+        
+        canal = interaction.channel
+        await canal.send(f"❌ Partida de **{self.nome_fila}** cancelada por desistência/recusa.")
+
+    async def on_timeout(self):
+        try:
+            for child in self.children:
+                child.disabled = True
+            embed = discord.Embed(
+                title="⏱️ Tempo Esgotado!",
+                description="A partida foi cancelada porque nem todos confirmaram a tempo.",
+                color=0xff0000
+            )
+            embed.set_footer(text="@Dz desenvolvedor")
+            await self.mensagem_ref.edit(embed=embed, view=self)
+        except:
+            pass
+
 async def criar_canal_partida(guild: discord.Guild, nome_fila: str, jogadores: list):
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -279,13 +348,21 @@ async def criar_canal_partida(guild: discord.Guild, nome_fila: str, jogadores: l
     canal = await guild.create_text_channel(name=f"⚔️-{nome_fila}".replace(" ", "-").replace("---", "-").lower(), overwrites=overwrites)
     mencoes = ", ".join([j.mention for j in jogadores])
     
+    # Busca o cargo de Administrador para marcar junto
+    cargo_adm = discord.utils.get(guild.roles, name="Administrador") or discord.utils.get(guild.roles, name="Admin")
+    mencao_adm = cargo_adm.mention if cargo_adm else "@Admin"
+
     view = DefinirVencedorView(jogadores, canal, nome_fila)
     embed = discord.Embed(
         title=f"Partida de {nome_fila}",
         description=f"Jogadores: {mencoes}\n\n**Canal pronto! Crie a sala manualmente e gerencie abaixo:**",
         color=0xff0000
     )
-    await canal.send(content=f"Olá macaquitos 🦧 {mencoes}", embed=embed, view=view)
+    embed.set_footer(text="@Dz desenvolvedor")
+    
+    # Mensagem destacada exigida com a marcação do cargo de admin e das duas pessoas
+    texto_zoeira = f"Calma seus filha duma puta eu fui criado agora pouco não sei criar sala sozinho ainda 😡 {mencao_adm} {mencoes}"
+    await canal.send(content=texto_zoeira, embed=embed, view=view)
 
 class DefinirVencedorView(discord.ui.View):
     def __init__(self, jogadores, canal, nome_fila):
@@ -323,7 +400,6 @@ class VencedorButton(discord.ui.Button):
         salvar_ranking(ranking_data)
         await atualizar_painel_global()
 
-        # Envia o registro para o canal de logs
         await enviar_log_partida(
             interaction.guild, 
             self.nome_fila, 
@@ -423,6 +499,7 @@ async def painel(ctx):
         color=0xffd700
     )
     embed.set_thumbnail(url="https://i.imgur.com/4M34hi2.png")
+    embed.set_footer(text="@Dz desenvolvedor")
     view = PainelCompletoView()
     painel_mensagem_ref = await ctx.send(embed=embed, view=view)
 
@@ -483,4 +560,3 @@ keep_alive()
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
     bot.run(TOKEN)
-
