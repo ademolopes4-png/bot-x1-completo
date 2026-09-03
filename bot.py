@@ -162,7 +162,7 @@ async def atualizar_painel_global():
                 description=f"{texto_top4}\n\n---------------------------------------------\n⚔️ **ESCOLHA SUA FILA ABAIXO:**",
                 color=0xffd700
             )
-            embed.set_thumbnail(url="https://i.ibb.co/V1n8m0v/mia.jpg")
+            embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1508527929687281765/1545211817104638062/MV5BZjA0MDgyYmItNzkzMC00OTM2LThlYzktMWMxZWU3ZGNkNDI3XkEyXkFqcGc._V1_FMjpg_UX1000_.jpg?ex=6a9b5225&is=6a9a00a5&hm=b54c6ff9b2af1225b8c52def49804a157e456130a9452ff8397d3b00c18eb38e&")
             embed.set_footer(text="@Dz desenvolvedor")
             await painel_mensagem_ref.edit(embed=embed)
         except:
@@ -215,7 +215,7 @@ async def atualizar_embed_fila(interaction: discord.Interaction, nome_fila: str,
         description=f"**Jogadores:**\n{mencoes_fila}\n\n⏳ *Aguardando o restante dos jogadores...*",
         color=0xff9900
     )
-    embed.set_thumbnail(url="https://i.ibb.co/V1n8m0v/mia.jpg")
+    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1508527929687281765/1545211817104638062/MV5BZjA0MDgyYmItNzkzMC00OTM2LThlYzktMWMxZWU3ZGNkNDI3XkEyXkFqcGc._V1_FMjpg_UX1000_.jpg?ex=6a9b5225&is=6a9a00a5&hm=b54c6ff9b2af1225b8c52def49804a157e456130a9452ff8397d3b00c18eb38e&")
     embed.set_footer(text="@Dz desenvolvedor")
     view = FilaAcoesView(nome_fila)
 
@@ -265,7 +265,6 @@ class FilaAcoesView(discord.ui.View):
         else:
             await interaction.response.send_message("Você não está nesta fila!", ephemeral=True)
 
-# --- SISTEMA DE CONFIRMAÇÃO DE PARTIDA ---
 async def iniciar_confirmacao_partida(guild: discord.Guild, nome_fila: str, jogadores: list):
     mencoes = ", ".join([j.mention for j in jogadores])
     view = ConfirmacaoPartidaView(jogadores, nome_fila, guild)
@@ -495,7 +494,7 @@ async def painel(ctx):
         description=f"{texto_top4}\n\n---------------------------------------------\n⚔️ **ESCOLHA SUA FILA ABAIXO:**",
         color=0xffd700
     )
-    embed.set_thumbnail(url="https://i.ibb.co/V1n8m0v/mia.jpg")
+    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1508527929687281765/1545211817104638062/MV5BZjA0MDgyYmItNzkzMC00OTM2LThlYzktMWMxZWU3ZGNkNDI3XkEyXkFqcGc._V1_FMjpg_UX1000_.jpg?ex=6a9b5225&is=6a9a00a5&hm=b54c6ff9b2af1225b8c52def49804a157e456130a9452ff8397d3b00c18eb38e&")
     embed.set_footer(text="@Dz desenvolvedor")
     view = PainelCompletoView()
     painel_mensagem_ref = await ctx.send(embed=embed, view=view)
